@@ -89,7 +89,7 @@ function base64ToEmojis(base64: string): string {
     }
     
     return emojis;
-  } catch (error) {
+  } catch {
     throw new Error('Failed to convert base64 to emojis');
   }
 }
@@ -121,7 +121,7 @@ function emojisToBase64(emojis: string): string {
     }
     
     return btoa(binary);
-  } catch (error) {
+  } catch {
     throw new Error('Failed to convert emojis to base64');
   }
 }
@@ -244,7 +244,7 @@ export function decodeEmojisToTextSimple(emojis: string): string {
     
     const decoder = new TextDecoder();
     return decoder.decode(bytes);
-  } catch (error) {
+  } catch {
     throw new Error('Failed to decode simple emoji text');
   }
 }

@@ -197,7 +197,7 @@ export async function decryptText(input: DecryptionInput): Promise<string> {
     const result = decoder.decode(decrypted);
     
     return result;
-  } catch (error) {
+  } catch {
     // Don't leak information about why decryption failed
     throw new Error('Decryption failed: Invalid password or corrupted data');
   }
@@ -212,6 +212,7 @@ export function clearString(str: string): void {
   if (typeof str === 'string' && str.length > 0) {
     try {
       // Attempt to overwrite references (limited effectiveness)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (str as any) = null;
     } catch {
       // Ignore errors

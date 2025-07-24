@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Unlock, Shield, Eye, EyeOff, Copy, Download, Upload, Sparkles, Key, Zap } from 'lucide-react';
-import { encryptText, decryptText, validatePassword, clearString, type EncryptionResult } from '@/lib/crypto';
-import { encodeToEmojis, decodeFromEmojis, formatEmojisForDisplay, unformatEmojis, getEmojiStats, emojisToBase64Public, type EmojiEncodedData } from '@/lib/emoji-encoder';
+import { encryptText, decryptText, validatePassword, type EncryptionResult } from '@/lib/crypto';
+import { encodeToEmojis, formatEmojisForDisplay, unformatEmojis, getEmojiStats, emojisToBase64Public } from '@/lib/emoji-encoder';
 import { copyToClipboard, downloadAsFile, readFileAsText, debounce, calculatePasswordEntropy } from '@/lib/utils';
 
 // Generate static particle positions to avoid hydration mismatch
@@ -31,7 +31,13 @@ export default function Home() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [passwordStrength, setPasswordStrength] = useState({ isValid: false, message: '', entropy: 0 });
-  const [emojiStats, setEmojiStats] = useState<any>(null);
+  const [emojiStats, setEmojiStats] = useState<{
+    totalEmojis: number;
+    uniqueEmojis: number;
+    compressionRatio: number;
+    estimatedBytes: number;
+    visualLength: number;
+  } | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [particlePositions] = useState(() => generateParticlePositions());
 
@@ -41,7 +47,7 @@ export default function Home() {
   }, []);
 
   // Debounced password validation
-  const validatePasswordDebounced = useCallback(
+  const validatePasswordDebounced = useMemo(() => 
     debounce((pwd: string) => {
       if (pwd) {
         const validation = validatePassword(pwd);
@@ -51,7 +57,7 @@ export default function Home() {
         setPasswordStrength({ isValid: false, message: '', entropy: 0 });
       }
     }, 300),
-    []
+    [setPasswordStrength]
   );
 
   useEffect(() => {
@@ -149,7 +155,7 @@ export default function Home() {
 
       setInputText(decryptedText);
       setSuccess('Text decrypted successfully! 🔓');
-    } catch (err) {
+    } catch {
       setError('Decryption failed: Invalid password or corrupted data');
     } finally {
       setIsProcessing(false);
@@ -185,7 +191,7 @@ export default function Home() {
         setResult(content);
       }
       setSuccess('File loaded successfully! 📁');
-    } catch (err) {
+    } catch {
       setError('Failed to read file');
     }
   };

@@ -37,7 +37,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 /**
  * Debounce function to limit rapid function calls
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -45,7 +45,7 @@ export function debounce<T extends (...args: any[]) => any>(
   
   return (...args: Parameters<T>) => {
     clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(null, args), wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
 }
 
@@ -68,7 +68,7 @@ export function formatFileSize(bytes: number): string {
 export function isValidBase64(str: string): boolean {
   try {
     return btoa(atob(str)) === str;
-  } catch (err) {
+  } catch {
     return false;
   }
 }
