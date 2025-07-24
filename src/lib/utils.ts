@@ -37,7 +37,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 /**
  * Debounce function to limit rapid function calls
  */
-export function debounce<T extends (...args: unknown[]) => unknown>(
+export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
