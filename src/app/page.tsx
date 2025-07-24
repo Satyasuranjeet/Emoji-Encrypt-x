@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Unlock, Shield, Eye, EyeOff, Copy, Download, Upload, Sparkles, Key, Zap } from 'lucide-react';
-import { encryptText, decryptText, validatePassword, type EncryptionResult } from '@/lib/crypto';
+import { encryptText, decryptText, type EncryptionResult } from '@/lib/crypto';
 import { encodeToEmojis, formatEmojisForDisplay, unformatEmojis, getEmojiStats, emojisToBase64Public } from '@/lib/emoji-encoder';
-import { copyToClipboard, downloadAsFile, readFileAsText, debounce, calculatePasswordEntropy } from '@/lib/utils';
+import { copyToClipboard, downloadAsFile, readFileAsText } from '@/lib/utils';
 
 // Generate static particle positions to avoid hydration mismatch
 const generateParticlePositions = () => {
@@ -30,7 +30,6 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [passwordStrength, setPasswordStrength] = useState({ isValid: false, message: '', entropy: 0 });
   const [emojiStats, setEmojiStats] = useState<{
     totalEmojis: number;
     uniqueEmojis: number;
@@ -45,24 +44,6 @@ export default function Home() {
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  // Debounced password validation
-  const validatePasswordDebounced = useMemo(() => 
-    debounce((pwd: string) => {
-      if (pwd) {
-        const validation = validatePassword(pwd);
-        const entropy = calculatePasswordEntropy(pwd);
-        setPasswordStrength({ ...validation, entropy });
-      } else {
-        setPasswordStrength({ isValid: false, message: '', entropy: 0 });
-      }
-    }, 300),
-    [setPasswordStrength]
-  );
-
-  useEffect(() => {
-    validatePasswordDebounced(password);
-  }, [password, validatePasswordDebounced]);
 
   const handleModeChange = (newMode: 'encrypt' | 'decrypt') => {
     setMode(newMode);
@@ -84,16 +65,6 @@ export default function Home() {
       return;
     }
 
-    if (mode === 'encrypt' && password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (!passwordStrength.isValid) {
-      setError(passwordStrength.message);
-      return;
-    }
-
     // Check if crypto is available
     if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
       setError('Encryption not available: This app requires a secure context (HTTPS)');
@@ -105,18 +76,29 @@ export default function Home() {
     setSuccess('');
 
     try {
-      console.log('Starting encryption process...');
-      console.log('Input text:', inputText);
-      console.log('Password length:', password.length);
+      console.log('=== ENCRYPTION DEBUG ===');
+      console.log('1. Input text:', inputText);
+      console.log('2. Password length:', password.length);
       
       const encryptionResult = await encryptText(inputText, password);
-      console.log('Encryption result:', encryptionResult);
+      console.log('3. Encryption result keys:', Object.keys(encryptionResult));
+      console.log('4. Encryption result preview:', {
+        encrypted: encryptionResult.encrypted.substring(0, 50) + '...',
+        salt: encryptionResult.salt,
+        iv: encryptionResult.iv,
+        tag: encryptionResult.tag
+      });
       
       const emojiData = encodeToEmojis(encryptionResult);
-      console.log('Emoji data:', emojiData);
+      console.log('5. Emoji data:', {
+        emojisLength: emojiData.emojis.length,
+        metadata: emojiData.metadata,
+        firstEmojis: Array.from(emojiData.emojis).slice(0, 10)
+      });
       
       const formattedEmojis = formatEmojisForDisplay(emojiData.emojis, 12);
-      console.log('Formatted emojis:', formattedEmojis);
+      console.log('6. Formatted emojis length:', formattedEmojis.length);
+      console.log('7. First 100 chars of formatted:', formattedEmojis.substring(0, 100));
       
       setResult(formattedEmojis);
       setEmojiStats(getEmojiStats(emojiData.emojis));
@@ -126,32 +108,6 @@ export default function Home() {
       setError(err instanceof Error ? err.message : 'Encryption failed');
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  // Add a test function to check basic encryption/decryption without emojis
-  const testBasicCrypto = async () => {
-    try {
-      console.log("=== Testing Basic Crypto ===");
-      const testText = "Hello World!";
-      const testPassword = "test123!";
-      
-      // Test encryption
-      const encrypted = await encryptText(testText, testPassword);
-      console.log("Encrypted:", encrypted);
-      
-      // Test decryption
-      const decrypted = await decryptText({
-        ...encrypted,
-        password: testPassword
-      });
-      console.log("Decrypted:", decrypted);
-      console.log("Match:", testText === decrypted);
-      
-      return testText === decrypted;
-    } catch (error) {
-      console.error("Basic crypto test failed:", error);
-      return false;
     }
   };
 
@@ -177,36 +133,32 @@ export default function Home() {
     setSuccess('');
 
     try {
-      console.log('Starting decryption process...');
-      console.log('Raw result input:', result);
-      
-      // First test basic crypto functions
-      const cryptoWorks = await testBasicCrypto();
-      if (!cryptoWorks) {
-        throw new Error('Basic crypto functions are not working');
-      }
+      console.log('=== DECRYPTION DEBUG ===');
+      console.log('1. Raw result input:', result);
       
       const unformattedEmojis = unformatEmojis(result);
-      console.log('Unformatted emojis:', unformattedEmojis);
-      console.log('Unformatted emojis length:', unformattedEmojis.length);
+      console.log('2. Unformatted emojis:', unformattedEmojis);
+      console.log('3. Unformatted emojis length:', unformattedEmojis.length);
+      console.log('4. First 10 emoji chars:', Array.from(unformattedEmojis).slice(0, 10));
       
       // Try to decode the emojis back to the original encryption result
       let combinedBase64: string;
       try {
         combinedBase64 = emojisToBase64Public(unformattedEmojis);
-        console.log('Combined base64:', combinedBase64);
+        console.log('5. Combined base64:', combinedBase64);
+        console.log('6. Base64 length:', combinedBase64.length);
       } catch (err) {
-        console.error('Error converting emojis to base64:', err);
+        console.error('ERROR at step 5 - converting emojis to base64:', err);
         throw new Error('Invalid emoji format - failed to convert to base64');
       }
       
       let combinedData: string;
       try {
         combinedData = atob(combinedBase64);
-        console.log('Combined data length:', combinedData.length);
-        console.log('Combined data preview:', combinedData.substring(0, 100));
+        console.log('7. Combined data length:', combinedData.length);
+        console.log('8. Combined data preview:', combinedData.substring(0, 200));
       } catch (err) {
-        console.error('Error decoding base64:', err);
+        console.error('ERROR at step 7 - decoding base64:', err);
         throw new Error('Invalid base64 data');
       }
       
@@ -214,29 +166,37 @@ export default function Home() {
       let encryptionResult: EncryptionResult;
       try {
         encryptionResult = JSON.parse(combinedData);
-        console.log('Parsed encryption result:', encryptionResult);
+        console.log('9. Parsed encryption result keys:', Object.keys(encryptionResult));
+        console.log('10. Encryption result structure check:', {
+          hasEncrypted: !!encryptionResult.encrypted,
+          hasSalt: !!encryptionResult.salt,
+          hasIv: !!encryptionResult.iv,
+          hasTag: !!encryptionResult.tag
+        });
       } catch (err) {
-        console.error('Error parsing JSON:', err);
+        console.error('ERROR at step 9 - parsing JSON:', err);
+        console.error('Raw data that failed to parse:', combinedData);
         throw new Error('Invalid emoji format - corrupted data');
       }
       
       // Validate structure
       if (!encryptionResult.encrypted || !encryptionResult.salt || 
           !encryptionResult.iv || !encryptionResult.tag) {
-        console.error('Invalid structure:', encryptionResult);
+        console.error('ERROR: Invalid structure:', encryptionResult);
         throw new Error('Invalid encryption data structure');
       }
 
-      console.log('Attempting decryption with password...');
+      console.log('11. Attempting decryption...');
       const decryptedText = await decryptText({
         ...encryptionResult,
         password
       });
+      console.log('12. Decryption successful!');
 
       setInputText(decryptedText);
       setSuccess('Text decrypted successfully! 🔓');
     } catch (err) {
-      console.error('Decryption error:', err);
+      console.error('FINAL ERROR:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       if (errorMessage.includes('Invalid password') || errorMessage.includes('Decryption failed')) {
         setError('Decryption failed: Invalid password');
@@ -284,28 +244,23 @@ export default function Home() {
     }
   };
 
-  const getPasswordStrengthColor = () => {
-    if (passwordStrength.entropy > 60) return 'text-green-500';
-    if (passwordStrength.entropy > 40) return 'text-yellow-500';
-    return 'text-red-500';
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white overflow-hidden">
       {/* Animated background particles - only render on client */}
       {isClient && (
         <div className="absolute inset-0 overflow-hidden">
           {particlePositions.map((particle, i) => (
             <motion.div
               key={i}
-              className="absolute w-2 h-2 bg-white/10 rounded-full"
+              className="absolute w-1 h-1 bg-purple-400/30 rounded-full"
               animate={{
-                x: [0, (Math.sin(i * 0.5) * 50)],
-                y: [0, (Math.cos(i * 0.3) * 50)],
-                opacity: [0.1, 0.5, 0.1],
+                x: [0, (Math.sin(i * 0.5) * 40)],
+                y: [0, (Math.cos(i * 0.3) * 40)],
+                opacity: [0.3, 0.8, 0.3],
+                scale: [1, 1.5, 1],
               }}
               transition={{
-                duration: 15 + (i % 10),
+                duration: 25 + (i % 15),
                 repeat: Infinity,
                 ease: "linear",
                 delay: particle.animationDelay,
@@ -319,30 +274,59 @@ export default function Home() {
         </div>
       )}
 
-      <div className="relative z-10 container mx-auto px-4 py-8">
+      <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-center mb-12"
+          className="text-center mb-8 sm:mb-12"
         >
           <motion.div
-            className="inline-flex items-center gap-2 mb-4"
+            className="inline-flex items-center gap-3 mb-6"
             whileHover={{ scale: 1.05 }}
             transition={{ type: "spring", stiffness: 300 }}
           >
-            <Shield size={48} className="text-cyan-400" />
-            <h1 className="text-6xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+            <motion.div
+              animate={{ 
+                rotate: [0, 360],
+                scale: [1, 1.1, 1]
+              }}
+              transition={{ 
+                duration: 8, 
+                repeat: Infinity, 
+                ease: "linear" 
+              }}
+            >
+              <Shield size={40} className="text-purple-400 sm:w-14 sm:h-14" />
+            </motion.div>
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
               EncryptCT
             </h1>
-            <Sparkles size={48} className="text-purple-400" />
+            <motion.div
+              animate={{ 
+                y: [0, -10, 0],
+                rotate: [0, 10, -10, 0]
+              }}
+              transition={{ 
+                duration: 3, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+            >
+              <Sparkles size={40} className="text-pink-400 sm:w-14 sm:h-14" />
+            </motion.div>
           </motion.div>
-          <p className="text-xl text-gray-300">
+          <p className="text-xl sm:text-2xl text-gray-300 mb-3">
             Military-grade text encryption with beautiful emoji encoding
           </p>
-          <div className="flex items-center justify-center gap-2 mt-2 text-sm text-gray-400">
-            <Zap size={16} />
+          <div className="flex items-center justify-center gap-3 mt-2 text-sm sm:text-base text-purple-300/80">
+            <motion.div
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <Zap size={16} className="sm:w-5 sm:h-5" />
+            </motion.div>
             <span>AES-256-GCM • PBKDF2 • 600K iterations</span>
           </div>
         </motion.div>
@@ -352,243 +336,292 @@ export default function Home() {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="flex justify-center mb-8"
+          className="flex justify-center mb-6 sm:mb-8"
         >
-          <div className="bg-white/10 backdrop-blur-md rounded-full p-1 border border-white/20">
-            <div className="flex">
+          <div className="bg-slate-800/30 backdrop-blur-lg rounded-2xl p-1.5 border border-purple-500/30 shadow-2xl shadow-purple-500/10">
+            <div className="flex relative">
+              <motion.div
+                className="absolute inset-0 rounded-xl bg-gradient-to-r opacity-20"
+                animate={{
+                  background: mode === 'encrypt' 
+                    ? ["linear-gradient(90deg, #06b6d4, #3b82f6)", "linear-gradient(90deg, #3b82f6, #06b6d4)"]
+                    : ["linear-gradient(90deg, #a855f7, #ec4899)", "linear-gradient(90deg, #ec4899, #a855f7)"]
+                }}
+                transition={{ duration: 3, repeat: Infinity, repeatType: "reverse" }}
+              />
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => handleModeChange('encrypt')}
-                className={`px-6 py-3 rounded-full flex items-center gap-2 transition-all duration-300 ${
+                className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl flex items-center gap-3 transition-all duration-500 text-sm sm:text-base font-medium relative z-10 ${
                   mode === 'encrypt'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg'
-                    : 'text-gray-300 hover:text-white'
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-xl shadow-cyan-500/30'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <Lock size={20} />
+                <motion.div
+                  animate={{ rotate: mode === 'encrypt' ? [0, 360] : 0 }}
+                  transition={{ duration: 2, repeat: mode === 'encrypt' ? Infinity : 0, ease: "linear" }}
+                >
+                  <Lock size={18} className="sm:w-5 sm:h-5" />
+                </motion.div>
                 Encrypt
               </motion.button>
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => handleModeChange('decrypt')}
-                className={`px-6 py-3 rounded-full flex items-center gap-2 transition-all duration-300 ${
+                className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl flex items-center gap-3 transition-all duration-500 text-sm sm:text-base font-medium relative z-10 ${
                   mode === 'decrypt'
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                    : 'text-gray-300 hover:text-white'
+                    ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-xl shadow-purple-500/30'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <Unlock size={20} />
+                <motion.div
+                  animate={{ rotate: mode === 'decrypt' ? [0, -360] : 0 }}
+                  transition={{ duration: 2, repeat: mode === 'decrypt' ? Infinity : 0, ease: "linear" }}
+                >
+                  <Unlock size={18} className="sm:w-5 sm:h-5" />
+                </motion.div>
                 Decrypt
               </motion.button>
             </div>
           </div>
         </motion.div>
 
-        <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Input Section */}
+        <div className="max-w-7xl mx-auto">
+          {/* Main Content Cards */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8 mb-8">
+            {/* Left Section - Changes based on mode */}
             <motion.div
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              className="space-y-6"
+              transition={{ duration: 0.8, delay: 0.3 }}
+              whileHover={{ y: -5 }}
+              className="group"
             >
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
-                  {mode === 'encrypt' ? <Lock size={24} /> : <Unlock size={24} />}
-                  {mode === 'encrypt' ? 'Text to Encrypt' : 'Decrypted Text'}
-                </h2>
+              <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/20 to-slate-900/40 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-purple-500/20 shadow-2xl shadow-purple-500/5 hover:shadow-purple-500/10 transition-all duration-500">
+                {/* Animated border */}
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-cyan-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-xl" />
                 
-                <div className="relative">
-                  <textarea
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={mode === 'encrypt' ? 'Enter your secret message...' : 'Decrypted text will appear here...'}
-                    className="w-full h-40 bg-black/20 border border-white/30 rounded-xl p-4 text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all duration-300"
-                    readOnly={mode === 'decrypt'}
+                <motion.h2 
+                  className="text-2xl sm:text-3xl font-bold mb-6 flex items-center gap-3 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.1, 1],
+                      rotate: mode === 'encrypt' ? [0, 5, -5, 0] : [0, -5, 5, 0]
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {mode === 'encrypt' ? <Lock size={24} className="sm:w-7 sm:h-7" /> : <Sparkles size={24} className="sm:w-7 sm:h-7" />}
+                  </motion.div>
+                  {mode === 'encrypt' ? 'Text to Encrypt' : 'Emoji Code Input'}
+                </motion.h2>
+                
+                <div className="relative group/textarea">
+                  <motion.textarea
+                    value={mode === 'encrypt' ? inputText : result}
+                    onChange={mode === 'encrypt' ? (e) => setInputText(e.target.value) : (e) => setResult(e.target.value)}
+                    placeholder={mode === 'encrypt' ? 'Enter your secret message...' : 'Paste your emoji code here...'}
+                    className={`w-full h-40 sm:h-48 bg-slate-900/60 border-2 border-slate-600/50 rounded-2xl p-6 text-white placeholder-slate-400 resize-none focus:outline-none focus:border-purple-500/60 focus:bg-slate-900/80 transition-all duration-300 leading-relaxed ${
+                      mode === 'encrypt' ? 'text-lg' : 'text-2xl sm:text-3xl'
+                    }`}
+                    whileFocus={{ scale: 1.02 }}
                   />
-                  <div className="absolute bottom-2 right-2 text-xs text-gray-400">
-                    {inputText.length} characters
-                  </div>
+                  <motion.div 
+                    className="absolute bottom-3 right-3 px-3 py-1 bg-slate-700/60 rounded-lg text-xs text-slate-300"
+                    animate={{ opacity: [0.6, 1, 0.6] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {mode === 'encrypt' ? `${inputText.length} characters` : `${result.length} characters`}
+                  </motion.div>
+                  
+                  {/* Animated border on focus */}
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 opacity-0 group-focus-within/textarea:opacity-20 transition-opacity duration-300 -z-10 blur-sm" />
                 </div>
 
-                <div className="flex gap-2 mt-4">
+                {/* Upload button */}
+                <div className="flex gap-3 mt-6">
                   <input
                     type="file"
                     accept=".txt"
-                    onChange={handleFileUpload}
+                    onChange={mode === 'encrypt' ? handleFileUpload : (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      readFileAsText(file).then(content => {
+                        setResult(content);
+                        setSuccess('Emoji file loaded successfully! 📁');
+                      }).catch(() => setError('Failed to read emoji file'));
+                    }}
                     className="hidden"
-                    id="file-upload"
+                    id="left-file-upload"
                   />
                   <motion.label
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    htmlFor="file-upload"
-                    className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg cursor-pointer transition-all duration-300"
+                    whileHover={{ scale: 1.05, y: -2 }}
+                    whileTap={{ scale: 0.95 }}
+                    htmlFor="left-file-upload"
+                    className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-slate-700/50 to-slate-600/50 hover:from-slate-600/60 hover:to-slate-500/60 rounded-xl cursor-pointer transition-all duration-300 text-sm font-medium border border-slate-500/30 shadow-lg"
                   >
-                    <Upload size={16} />
-                    Upload File
+                    <motion.div
+                      animate={{ y: [0, -2, 0] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      <Upload size={16} className="sm:w-5 sm:h-5" />
+                    </motion.div>
+                    {mode === 'encrypt' ? 'Upload Text File' : 'Upload Emoji File'}
                   </motion.label>
                 </div>
               </div>
-
-              {/* Password Section */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <Key size={20} />
-                  Password
-                </h3>
-                
-                <div className="space-y-4">
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter encryption password..."
-                      className="w-full bg-black/20 border border-white/30 rounded-xl p-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all duration-300"
-                    />
-                    <button
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
-                  </div>
-
-                  {mode === 'encrypt' && (
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm password..."
-                        className="w-full bg-black/20 border border-white/30 rounded-xl p-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all duration-300"
-                      />
-                    </div>
-                  )}
-
-                  {/* Password Strength Indicator */}
-                  {password && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      className="space-y-2"
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span className={getPasswordStrengthColor()}>
-                          {passwordStrength.message || `Entropy: ${passwordStrength.entropy.toFixed(1)} bits`}
-                        </span>
-                        {passwordStrength.isValid && <span className="text-green-400">✓</span>}
-                      </div>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            passwordStrength.entropy > 60 ? 'bg-green-500' :
-                            passwordStrength.entropy > 40 ? 'bg-yellow-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${Math.min(100, (passwordStrength.entropy / 80) * 100)}%` }}
-                        />
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={mode === 'encrypt' ? handleEncrypt : handleDecrypt}
-                disabled={isProcessing}
-                className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-2 transition-all duration-300 ${
-                  mode === 'encrypt'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
-                    : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
-                } disabled:opacity-50 disabled:cursor-not-allowed shadow-xl`}
-              >
-                {isProcessing ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  >
-                    <Shield size={20} />
-                  </motion.div>
-                ) : mode === 'encrypt' ? (
-                  <>
-                    <Lock size={20} />
-                    Encrypt to Emojis
-                  </>
-                ) : (
-                  <>
-                    <Unlock size={20} />
-                    Decrypt from Emojis
-                  </>
-                )}
-              </motion.button>
             </motion.div>
 
-            {/* Result Section */}
+            {/* Right Section - Changes based on mode */}
             <motion.div
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="space-y-6"
+              transition={{ duration: 0.8, delay: 0.4 }}
+              whileHover={{ y: -5 }}
+              className="group"
             >
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
-                <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
-                  <Sparkles size={24} />
-                  {mode === 'encrypt' ? 'Encrypted Emojis' : 'Emoji Code Input'}
-                </h2>
+              <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/20 to-slate-900/40 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-cyan-500/20 shadow-2xl shadow-cyan-500/5 hover:shadow-cyan-500/10 transition-all duration-500">
+                {/* Animated border */}
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 blur-xl" />
                 
-                <div className="relative">
-                  <textarea
-                    value={result}
-                    onChange={mode === 'decrypt' ? (e) => setResult(e.target.value) : undefined}
-                    placeholder={mode === 'encrypt' ? 'Encrypted emojis will appear here...' : 'Paste your emoji code here...'}
-                    className="w-full h-40 bg-black/20 border border-white/30 rounded-xl p-4 text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-300 text-2xl leading-relaxed"
-                    readOnly={mode === 'encrypt'}
+                <motion.h2 
+                  className="text-2xl sm:text-3xl font-bold mb-6 flex items-center gap-3 bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.2, 1],
+                      rotate: mode === 'encrypt' ? [0, 180, 360] : [0, -5, 5, 0]
+                    }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    {mode === 'encrypt' ? <Sparkles size={24} className="sm:w-7 sm:h-7" /> : <Unlock size={24} className="sm:w-7 sm:h-7" />}
+                  </motion.div>
+                  {mode === 'encrypt' ? 'Encrypted Emojis' : 'Decrypted Text'}
+                </motion.h2>
+                
+                <div className="relative group/textarea">
+                  <motion.textarea
+                    value={mode === 'encrypt' ? result : inputText}
+                    onChange={mode === 'decrypt' ? undefined : undefined}
+                    placeholder={mode === 'encrypt' ? 'Encrypted emojis will appear here...' : 'Decrypted text will appear here...'}
+                    className={`w-full h-40 sm:h-48 bg-slate-900/60 border-2 border-slate-600/50 rounded-2xl p-6 text-white placeholder-slate-400 resize-none focus:outline-none focus:border-cyan-500/60 focus:bg-slate-900/80 transition-all duration-300 leading-relaxed ${
+                      mode === 'encrypt' ? 'text-2xl sm:text-3xl' : 'text-lg'
+                    }`}
+                    readOnly={true}
+                    whileFocus={{ scale: 1.02 }}
                   />
+                  <motion.div 
+                    className="absolute bottom-3 right-3 px-3 py-1 bg-slate-700/60 rounded-lg text-xs text-slate-300"
+                    animate={{ opacity: [0.6, 1, 0.6] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    {mode === 'encrypt' ? `${result.length} characters` : `${inputText.length} characters`}
+                  </motion.div>
+                  
+                  {/* Animated border on focus */}
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 opacity-0 group-focus-within/textarea:opacity-20 transition-opacity duration-300 -z-10 blur-sm" />
                 </div>
 
-                {/* Emoji Stats */}
+                {/* Download button for decrypted text in decrypt mode */}
+                {mode === 'decrypt' && inputText && (
+                  <div className="flex gap-3 mt-6">
+                    <motion.button
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        downloadAsFile(inputText, 'decrypted-text.txt');
+                        setSuccess('Decrypted text downloaded! 💾');
+                      }}
+                      className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500/90 hover:to-teal-500/90 rounded-xl transition-all duration-300 text-sm font-medium shadow-lg"
+                    >
+                      <motion.div
+                        animate={{ y: [0, -2, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        <Download size={16} className="sm:w-5 sm:h-5" />
+                      </motion.div>
+                      Download Decrypted Text
+                    </motion.button>
+                  </div>
+                )}
+
+                {/* Emoji Stats - Only show in encrypt mode */}
                 {emojiStats && mode === 'encrypt' && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 p-4 bg-black/20 rounded-lg"
+                    className="mt-6 p-4 sm:p-6 bg-gradient-to-r from-slate-900/60 to-slate-800/60 rounded-2xl border border-slate-600/30 backdrop-blur-sm"
                   >
-                    <h4 className="font-semibold mb-2">Encryption Statistics</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-300">
-                      <div>Total Emojis: {emojiStats.totalEmojis}</div>
-                      <div>Unique Emojis: {emojiStats.uniqueEmojis}</div>
-                      <div>Data Size: {emojiStats.estimatedBytes} bytes</div>
-                      <div>Compression: {(emojiStats.compressionRatio * 100).toFixed(1)}%</div>
+                    <h4 className="font-bold mb-4 text-lg text-cyan-300 flex items-center gap-2">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                      >
+                        📊
+                      </motion.div>
+                      Encryption Statistics
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm sm:text-base">
+                      <motion.div 
+                        className="bg-slate-800/50 p-3 rounded-xl border border-slate-600/30"
+                        whileHover={{ scale: 1.05 }}
+                      >
+                        <div className="text-purple-300 font-medium">Total Emojis</div>
+                        <div className="text-white text-lg font-bold">{emojiStats.totalEmojis}</div>
+                      </motion.div>
+                      <motion.div 
+                        className="bg-slate-800/50 p-3 rounded-xl border border-slate-600/30"
+                        whileHover={{ scale: 1.05 }}
+                      >
+                        <div className="text-pink-300 font-medium">Unique Emojis</div>
+                        <div className="text-white text-lg font-bold">{emojiStats.uniqueEmojis}</div>
+                      </motion.div>
+                      <motion.div 
+                        className="bg-slate-800/50 p-3 rounded-xl border border-slate-600/30"
+                        whileHover={{ scale: 1.05 }}
+                      >
+                        <div className="text-cyan-300 font-medium">Data Size</div>
+                        <div className="text-white text-lg font-bold">{emojiStats.estimatedBytes} bytes</div>
+                      </motion.div>
+                      <motion.div 
+                        className="bg-slate-800/50 p-3 rounded-xl border border-slate-600/30"
+                        whileHover={{ scale: 1.05 }}
+                      >
+                        <div className="text-green-300 font-medium">Compression</div>
+                        <div className="text-white text-lg font-bold">{(emojiStats.compressionRatio * 100).toFixed(1)}%</div>
+                      </motion.div>
                     </div>
                   </motion.div>
                 )}
 
-                {/* Action Buttons */}
-                {result && (
-                  <div className="flex gap-2 mt-4">
+                {/* Action Buttons - Only show for encrypted emojis in encrypt mode */}
+                {result && mode === 'encrypt' && (
+                  <div className="flex gap-3 mt-6">
                     <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={handleCopy}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all duration-300"
+                      className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500/90 hover:to-teal-500/90 rounded-xl transition-all duration-300 text-sm font-medium shadow-lg"
                     >
-                      <Copy size={16} />
+                      <Copy size={16} className="sm:w-5 sm:h-5" />
                       Copy
                     </motion.button>
                     <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+                      whileHover={{ scale: 1.05, y: -2 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={handleDownload}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all duration-300"
+                      className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-indigo-600/80 to-purple-600/80 hover:from-indigo-500/90 hover:to-purple-500/90 rounded-xl transition-all duration-300 text-sm font-medium shadow-lg"
                     >
-                      <Download size={16} />
+                      <Download size={16} className="sm:w-5 sm:h-5" />
                       Download
                     </motion.button>
                   </div>
@@ -596,6 +629,108 @@ export default function Home() {
               </div>
             </motion.div>
           </div>
+
+          {/* Centered Password Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.5 }}
+            className="max-w-2xl mx-auto mb-8"
+          >
+            <div className="relative bg-gradient-to-br from-slate-800/50 via-purple-900/30 to-slate-800/50 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 border border-purple-400/30 shadow-2xl shadow-purple-500/10">
+              {/* Animated background glow */}
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-cyan-500/10 animate-pulse" />
+              
+              <motion.h3 
+                className="text-2xl sm:text-3xl font-bold mb-6 text-center flex items-center justify-center gap-3 bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.7 }}
+              >
+                <motion.div
+                  animate={{ 
+                    rotate: [0, 360],
+                    scale: [1, 1.2, 1]
+                  }}
+                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Key size={28} className="sm:w-8 sm:h-8" />
+                </motion.div>
+                Security Password
+              </motion.h3>
+              
+              <div className="space-y-6">
+                <div className="relative group">
+                  <motion.input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your encryption password..."
+                    className="w-full bg-slate-900/60 border-2 border-slate-600/50 rounded-2xl p-5 pr-14 text-white placeholder-slate-400 focus:outline-none focus:border-purple-500/60 focus:bg-slate-900/80 transition-all duration-300 text-lg"
+                    whileFocus={{ scale: 1.02 }}
+                  />
+                  <motion.button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-purple-400 transition-colors"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <motion.div
+                      animate={{ rotate: showPassword ? 180 : 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      {showPassword ? <EyeOff size={24} /> : <Eye size={24} />}
+                    </motion.div>
+                  </motion.button>
+                  
+                  {/* Animated border on focus */}
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 opacity-0 group-focus-within:opacity-20 transition-opacity duration-300 -z-10 blur-sm" />
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <motion.button
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={mode === 'encrypt' ? handleEncrypt : handleDecrypt}
+                disabled={isProcessing}
+                className={`w-full py-5 mt-8 rounded-2xl font-bold text-lg sm:text-xl flex items-center justify-center gap-4 transition-all duration-500 shadow-2xl ${
+                  mode === 'encrypt'
+                    ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 hover:from-cyan-400 hover:via-blue-400 hover:to-purple-400 shadow-cyan-500/30'
+                    : 'bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-400 hover:via-pink-400 hover:to-cyan-400 shadow-purple-500/30'
+                } disabled:opacity-50 disabled:cursor-not-allowed text-white`}
+              >
+                {isProcessing ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Shield size={24} className="sm:w-6 sm:h-6" />
+                  </motion.div>
+                ) : mode === 'encrypt' ? (
+                  <>
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      <Lock size={24} className="sm:w-6 sm:h-6" />
+                    </motion.div>
+                    Encrypt to Emojis
+                  </>
+                ) : (
+                  <>
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      <Unlock size={24} className="sm:w-6 sm:h-6" />
+                    </motion.div>
+                    Decrypt from Emojis
+                  </>
+                )}
+              </motion.button>
+            </div>
+          </motion.div>
         </div>
 
         {/* Status Messages */}
@@ -605,13 +740,13 @@ export default function Home() {
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 50 }}
-              className="fixed bottom-6 right-6 max-w-md"
+              className="fixed bottom-4 right-4 max-w-sm z-50"
             >
               <div
-                className={`p-4 rounded-xl shadow-2xl backdrop-blur-md border ${
+                className={`p-3 sm:p-4 rounded-xl shadow-2xl backdrop-blur-md border text-sm sm:text-base ${
                   error
-                    ? 'bg-red-500/20 border-red-500/50 text-red-100'
-                    : 'bg-green-500/20 border-green-500/50 text-green-100'
+                    ? 'bg-red-900/80 border-red-700/50 text-red-100'
+                    : 'bg-green-900/80 border-green-700/50 text-green-100'
                 }`}
               >
                 {error || success}
@@ -625,14 +760,29 @@ export default function Home() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: 0.6 }}
-          className="mt-12 text-center"
+          className="mt-8 sm:mt-12 text-center space-y-4"
         >
-          <div className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20">
-            <Shield size={16} />
-            <span className="text-sm text-gray-300">
+          <div className="inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-gray-800/40 backdrop-blur-md rounded-full border border-gray-700/50">
+            <Shield size={14} className="sm:w-4 sm:h-4" />
+            <span className="text-xs sm:text-sm text-gray-400">
               Your data never leaves your browser • Client-side encryption only
             </span>
           </div>
+          
+          {/* Developer Credit */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.8 }}
+            className="text-center"
+          >
+            <p className="text-sm text-gray-500">
+              Developed with ❤️ by{' '}
+              <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent font-semibold">
+                Satya
+              </span>
+            </p>
+          </motion.div>
         </motion.div>
       </div>
     </div>

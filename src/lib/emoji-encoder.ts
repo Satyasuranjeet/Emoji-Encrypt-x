@@ -15,7 +15,7 @@ import { EncryptionResult } from './crypto';
 const EMOJI_ALPHABET = [
   // Faces and expressions (0-31)
   '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
-  '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔',
+  '😘', '😗', '☺', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔',
   
   // More faces (32-63)
   '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷',
@@ -26,7 +26,7 @@ const EMOJI_ALPHABET = [
   '🐒', '🦍', '🦧', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴',
   
   // More animals (96-127)
-  '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕',
+  '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐜', '🦟', '🦗', '🕷', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕',
   '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓',
   
   // Nature (128-159)
@@ -34,7 +34,7 @@ const EMOJI_ALPHABET = [
   '🍇', '🍈', '🍉', '🍊', '🍋', '🍌', '🍍', '🥭', '🍎', '🍏', '🍐', '🍑', '🍒', '🍓', '🫐', '🥝',
   
   // Food (160-191)
-  '🍅', '🫒', '🥥', '🥑', '🍆', '🥔', '🥕', '🌽', '🌶️', '🫑', '🥒', '🥬', '🥦', '🍄', '🥜', '🌰',
+  '🍅', '🫒', '🥥', '🥑', '🍆', '🥔', '🥕', '🌽', '🌶', '🫑', '🥒', '🥬', '🥦', '🍄', '🥜', '🌰',
   '🍞', '🥐', '🥖', '🫓', '🥨', '🥯', '🥞', '🧇', '🧀', '🍖', '🍗', '🥩', '🥓', '🍔', '🍟', '🍕',
   
   // Objects (192-223)
@@ -43,7 +43,7 @@ const EMOJI_ALPHABET = [
   
   // Symbols and Objects (224-255)
   '🔮', '💎', '⚡', '🔥', '💫', '⭐', '🌟', '✨', '💥', '💨', '💦', '💧', '🌊', '🎪', '🎨', '🎭',
-  '🎪', '🎫', '🎟️', '🎠', '🎡', '🎢', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝'
+  '🎪', '🎫', '🎟', '🎠', '🎡', '🎢', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝'
 ];
 
 // Verification that we have exactly 256 emojis
@@ -51,10 +51,15 @@ if (EMOJI_ALPHABET.length !== 256) {
   throw new Error(`Emoji alphabet must contain exactly 256 emojis, got ${EMOJI_ALPHABET.length}`);
 }
 
-// Create reverse mapping for decoding
+// Create reverse mapping for decoding with Unicode normalization
 const EMOJI_TO_BYTE = new Map<string, number>();
 EMOJI_ALPHABET.forEach((emoji, index) => {
-  EMOJI_TO_BYTE.set(emoji, index);
+  const normalizedEmoji = emoji.normalize('NFC');
+  EMOJI_TO_BYTE.set(normalizedEmoji, index);
+  // Also map the original in case normalization changes it
+  if (emoji !== normalizedEmoji) {
+    EMOJI_TO_BYTE.set(emoji, index);
+  }
 });
 
 /**
@@ -88,7 +93,8 @@ function base64ToEmojis(base64: string): string {
       emojis += EMOJI_ALPHABET[bytes[i]];
     }
     
-    return emojis;
+    // Normalize the output to ensure consistency
+    return emojis.normalize('NFC');
   } catch {
     throw new Error('Failed to convert base64 to emojis');
   }
@@ -99,16 +105,34 @@ function base64ToEmojis(base64: string): string {
  */
 function emojisToBase64(emojis: string): string {
   try {
+    // Normalize Unicode to handle variation selectors consistently
+    const normalizedEmojis = emojis.normalize('NFC');
+    
     // Split emojis into individual characters (handling multi-byte emojis)
-    const emojiArray = Array.from(emojis);
+    const emojiArray = Array.from(normalizedEmojis);
     const bytes = new Uint8Array(emojiArray.length);
+    
+    console.log('emojisToBase64 debug:');
+    console.log('- Input emojis length:', emojis.length);
+    console.log('- Normalized emojis length:', normalizedEmojis.length);
+    console.log('- Emoji array length:', emojiArray.length);
+    console.log('- First 10 emojis:', emojiArray.slice(0, 10));
     
     for (let i = 0; i < emojiArray.length; i++) {
       const emoji = emojiArray[i];
       const byteValue = EMOJI_TO_BYTE.get(emoji);
       
       if (byteValue === undefined) {
-        throw new Error(`Invalid emoji found: ${emoji}`);
+        console.error(`Invalid emoji at position ${i}:`, {
+          emoji: emoji,
+          codePoint: emoji.codePointAt(0),
+          charCode: emoji.charCodeAt(0),
+          length: emoji.length,
+          isInAlphabet: EMOJI_ALPHABET.includes(emoji),
+          normalizedEmoji: emoji.normalize('NFC'),
+          normalizedIsInAlphabet: EMOJI_ALPHABET.includes(emoji.normalize('NFC'))
+        });
+        throw new Error(`Invalid emoji found at position ${i}: ${emoji} (code: ${emoji.codePointAt(0)})`);
       }
       
       bytes[i] = byteValue;
@@ -121,7 +145,8 @@ function emojisToBase64(emojis: string): string {
     }
     
     return btoa(binary);
-  } catch {
+  } catch (error) {
+    console.error('emojisToBase64 error details:', error);
     throw new Error('Failed to convert emojis to base64');
   }
 }
@@ -267,7 +292,22 @@ export function formatEmojisForDisplay(emojis: string, groupSize: number = 8): s
  * Removes formatting from emoji display back to raw emoji string
  */
 export function unformatEmojis(formattedEmojis: string): string {
-  return formattedEmojis.replace(/\s/g, '');
+  console.log('unformatEmojis debug:');
+  console.log('- Input length:', formattedEmojis.length);
+  console.log('- Input preview:', formattedEmojis.substring(0, 50));
+  
+  const unformatted = formattedEmojis.replace(/\s/g, '');
+  
+  // Normalize Unicode to handle variation selectors consistently
+  const normalized = unformatted.normalize('NFC');
+  
+  console.log('- Output length:', unformatted.length);
+  console.log('- Normalized length:', normalized.length);
+  console.log('- Output preview:', unformatted.substring(0, 50));
+  console.log('- Normalized preview:', normalized.substring(0, 50));
+  console.log('- Character codes of first 10:', Array.from(normalized).slice(0, 10).map(c => c.codePointAt(0)));
+  
+  return normalized;
 }
 
 /**
