@@ -423,14 +423,13 @@ export default function Home() {
                 </motion.h2>
                 
                 <div className="relative group/textarea">
-                  <motion.textarea
+                  <textarea
                     value={mode === 'encrypt' ? inputText : result}
                     onChange={mode === 'encrypt' ? (e) => setInputText(e.target.value) : (e) => setResult(e.target.value)}
                     placeholder={mode === 'encrypt' ? 'Enter your secret message...' : 'Paste your emoji code here...'}
                     className={`w-full h-40 sm:h-48 bg-slate-900/60 border-2 border-slate-600/50 rounded-2xl p-6 text-white placeholder-slate-400 resize-none focus:outline-none focus:border-purple-500/60 focus:bg-slate-900/80 transition-all duration-300 leading-relaxed ${
                       mode === 'encrypt' ? 'text-lg' : 'text-2xl sm:text-3xl'
                     }`}
-                    whileFocus={{ scale: 1.02 }}
                   />
                   <motion.div 
                     className="absolute bottom-3 right-3 px-3 py-1 bg-slate-700/60 rounded-lg text-xs text-slate-300"
@@ -509,7 +508,7 @@ export default function Home() {
                 </motion.h2>
                 
                 <div className="relative group/textarea">
-                  <motion.textarea
+                  <textarea
                     value={mode === 'encrypt' ? result : inputText}
                     onChange={mode === 'decrypt' ? undefined : undefined}
                     placeholder={mode === 'encrypt' ? 'Encrypted emojis will appear here...' : 'Decrypted text will appear here...'}
@@ -517,7 +516,6 @@ export default function Home() {
                       mode === 'encrypt' ? 'text-2xl sm:text-3xl' : 'text-lg'
                     }`}
                     readOnly={true}
-                    whileFocus={{ scale: 1.02 }}
                   />
                   <motion.div 
                     className="absolute bottom-3 right-3 px-3 py-1 bg-slate-700/60 rounded-lg text-xs text-slate-300"
@@ -661,13 +659,12 @@ export default function Home() {
               
               <div className="space-y-6">
                 <div className="relative group">
-                  <motion.input
+                  <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your encryption password..."
                     className="w-full bg-slate-900/60 border-2 border-slate-600/50 rounded-2xl p-5 pr-14 text-white placeholder-slate-400 focus:outline-none focus:border-purple-500/60 focus:bg-slate-900/80 transition-all duration-300 text-lg"
-                    whileFocus={{ scale: 1.02 }}
                   />
                   <motion.button
                     onClick={() => setShowPassword(!showPassword)}
