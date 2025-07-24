@@ -105,17 +105,53 @@ export default function Home() {
     setSuccess('');
 
     try {
+      console.log('Starting encryption process...');
+      console.log('Input text:', inputText);
+      console.log('Password length:', password.length);
+      
       const encryptionResult = await encryptText(inputText, password);
+      console.log('Encryption result:', encryptionResult);
+      
       const emojiData = encodeToEmojis(encryptionResult);
+      console.log('Emoji data:', emojiData);
+      
       const formattedEmojis = formatEmojisForDisplay(emojiData.emojis, 12);
+      console.log('Formatted emojis:', formattedEmojis);
       
       setResult(formattedEmojis);
       setEmojiStats(getEmojiStats(emojiData.emojis));
       setSuccess('Text encrypted successfully! 🔐');
     } catch (err) {
+      console.error('Encryption error:', err);
       setError(err instanceof Error ? err.message : 'Encryption failed');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // Add a test function to check basic encryption/decryption without emojis
+  const testBasicCrypto = async () => {
+    try {
+      console.log("=== Testing Basic Crypto ===");
+      const testText = "Hello World!";
+      const testPassword = "test123!";
+      
+      // Test encryption
+      const encrypted = await encryptText(testText, testPassword);
+      console.log("Encrypted:", encrypted);
+      
+      // Test decryption
+      const decrypted = await decryptText({
+        ...encrypted,
+        password: testPassword
+      });
+      console.log("Decrypted:", decrypted);
+      console.log("Match:", testText === decrypted);
+      
+      return testText === decrypted;
+    } catch (error) {
+      console.error("Basic crypto test failed:", error);
+      return false;
     }
   };
 
@@ -141,27 +177,57 @@ export default function Home() {
     setSuccess('');
 
     try {
+      console.log('Starting decryption process...');
+      console.log('Raw result input:', result);
+      
+      // First test basic crypto functions
+      const cryptoWorks = await testBasicCrypto();
+      if (!cryptoWorks) {
+        throw new Error('Basic crypto functions are not working');
+      }
+      
       const unformattedEmojis = unformatEmojis(result);
+      console.log('Unformatted emojis:', unformattedEmojis);
+      console.log('Unformatted emojis length:', unformattedEmojis.length);
       
       // Try to decode the emojis back to the original encryption result
-      // We need to bypass the metadata since we only have the emoji string
-      const combinedBase64 = emojisToBase64Public(unformattedEmojis);
-      const combinedData = atob(combinedBase64);
+      let combinedBase64: string;
+      try {
+        combinedBase64 = emojisToBase64Public(unformattedEmojis);
+        console.log('Combined base64:', combinedBase64);
+      } catch (err) {
+        console.error('Error converting emojis to base64:', err);
+        throw new Error('Invalid emoji format - failed to convert to base64');
+      }
+      
+      let combinedData: string;
+      try {
+        combinedData = atob(combinedBase64);
+        console.log('Combined data length:', combinedData.length);
+        console.log('Combined data preview:', combinedData.substring(0, 100));
+      } catch (err) {
+        console.error('Error decoding base64:', err);
+        throw new Error('Invalid base64 data');
+      }
       
       // Validate that the data looks like valid JSON
       let encryptionResult: EncryptionResult;
       try {
         encryptionResult = JSON.parse(combinedData);
-      } catch {
+        console.log('Parsed encryption result:', encryptionResult);
+      } catch (err) {
+        console.error('Error parsing JSON:', err);
         throw new Error('Invalid emoji format - corrupted data');
       }
       
       // Validate structure
       if (!encryptionResult.encrypted || !encryptionResult.salt || 
           !encryptionResult.iv || !encryptionResult.tag) {
+        console.error('Invalid structure:', encryptionResult);
         throw new Error('Invalid encryption data structure');
       }
 
+      console.log('Attempting decryption with password...');
       const decryptedText = await decryptText({
         ...encryptionResult,
         password
@@ -170,13 +236,14 @@ export default function Home() {
       setInputText(decryptedText);
       setSuccess('Text decrypted successfully! 🔓');
     } catch (err) {
+      console.error('Decryption error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      if (errorMessage.includes('Invalid password')) {
+      if (errorMessage.includes('Invalid password') || errorMessage.includes('Decryption failed')) {
         setError('Decryption failed: Invalid password');
-      } else if (errorMessage.includes('Invalid emoji') || errorMessage.includes('corrupted')) {
+      } else if (errorMessage.includes('Invalid emoji') || errorMessage.includes('corrupted') || errorMessage.includes('base64')) {
         setError('Decryption failed: Invalid or corrupted emoji data');
       } else {
-        setError('Decryption failed: Invalid password or corrupted data');
+        setError(`Decryption failed: ${errorMessage}`);
       }
     } finally {
       setIsProcessing(false);
