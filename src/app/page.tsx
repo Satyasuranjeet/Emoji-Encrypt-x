@@ -144,9 +144,23 @@ export default function Home() {
       const unformattedEmojis = unformatEmojis(result);
       
       // Try to decode the emojis back to the original encryption result
+      // We need to bypass the metadata since we only have the emoji string
       const combinedBase64 = emojisToBase64Public(unformattedEmojis);
       const combinedData = atob(combinedBase64);
-      const encryptionResult: EncryptionResult = JSON.parse(combinedData);
+      
+      // Validate that the data looks like valid JSON
+      let encryptionResult: EncryptionResult;
+      try {
+        encryptionResult = JSON.parse(combinedData);
+      } catch {
+        throw new Error('Invalid emoji format - corrupted data');
+      }
+      
+      // Validate structure
+      if (!encryptionResult.encrypted || !encryptionResult.salt || 
+          !encryptionResult.iv || !encryptionResult.tag) {
+        throw new Error('Invalid encryption data structure');
+      }
 
       const decryptedText = await decryptText({
         ...encryptionResult,
@@ -155,8 +169,15 @@ export default function Home() {
 
       setInputText(decryptedText);
       setSuccess('Text decrypted successfully! 🔓');
-    } catch {
-      setError('Decryption failed: Invalid password or corrupted data');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      if (errorMessage.includes('Invalid password')) {
+        setError('Decryption failed: Invalid password');
+      } else if (errorMessage.includes('Invalid emoji') || errorMessage.includes('corrupted')) {
+        setError('Decryption failed: Invalid or corrupted emoji data');
+      } else {
+        setError('Decryption failed: Invalid password or corrupted data');
+      }
     } finally {
       setIsProcessing(false);
     }
